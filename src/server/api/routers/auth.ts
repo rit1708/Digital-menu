@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { createTRPCRouter, publicProcedure, protectedProcedure } from "~/server/api/trpc";
+import {
+  createTRPCRouter,
+  publicProcedure,
+  protectedProcedure,
+} from "~/server/api/trpc";
 import { randomBytes } from "crypto";
 import { sendVerificationCodeEmail } from "~/lib/send-email";
 import { env } from "~/env.mjs";
@@ -21,26 +25,60 @@ export const authRouter = createTRPCRouter({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const code = generateVerificationCode();
-      const expiresAt = new Date();
-      expiresAt.setMinutes(expiresAt.getMinutes() + 10); // Code expires in 10 minutes
+      try {
+        const code = generateVerificationCode();
+        const expiresAt = new Date();
+        expiresAt.setMinutes(expiresAt.getMinutes() + 10); // Code expires in 10 minutes
 
-      await ctx.db.verificationCode.create({
-        data: {
-          email: input.email,
+        await ctx.db.verificationCode.create({
+          data: {
+            email: input.email,
+            code,
+            expiresAt,
+          },
+        });
+
+        const sendVerificationCode = env.SEND_VERIFICATION_CODE ?? false;
+        const result = await sendVerificationCodeEmail(
+          input.email,
           code,
-          expiresAt,
-        },
-      });
+          sendVerificationCode
+        );
+        if (result.success) {
+          return { success: true, message: result.message, code: result.code };
+        } else {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to send verification code",
+          });
+        }
+      } catch (error) {
+        // If it's already a TRPCError, re-throw it
+        if (error instanceof TRPCError) {
+          throw error;
+        }
 
-      const sendVerificationCode = env.SEND_VERIFICATION_CODE ?? false;
-      const result = await sendVerificationCodeEmail(input.email, code, sendVerificationCode)
-      if (result.success) {
-        return { success: true, message: result.message, code: result.code };
-      } else {
+        // Handle database connection errors
+        if (error && typeof error === "object" && "code" in error) {
+          const dbError = error as { code?: string; message?: string };
+          if (dbError.code === "P1001" || dbError.code === "P2002") {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Database connection error. Please try again later.",
+              cause: error,
+            });
+          }
+        }
+
+        // For any other error, wrap it in a TRPCError
+        console.error("Unexpected error in sendVerificationCode:", error);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to send verification code",
+          message:
+            error instanceof Error
+              ? error.message
+              : "An unexpected error occurred",
+          cause: error,
         });
       }
     }),
@@ -156,7 +194,8 @@ export const authRouter = createTRPCRouter({
       // Auto-create user if they don't exist (using email-based defaults)
       if (!user) {
         const emailName = input.email.split("@")[0];
-        const capitalizedName = emailName.charAt(0).toUpperCase() + emailName.slice(1);
+        const capitalizedName =
+          emailName.charAt(0).toUpperCase() + emailName.slice(1);
         user = await ctx.db.user.create({
           data: {
             email: input.email,
@@ -210,14 +249,17 @@ export const authRouter = createTRPCRouter({
 
   logout: protectedProcedure.mutation(async ({ ctx }) => {
     // Extract token from headers (handle both cases)
-    const authHeader = ctx.req.headers?.authorization || 
-                      ctx.req.headers?.["Authorization"] ||
-                      (ctx.req.headers as Record<string, string | string[] | undefined>)?.authorization;
-    
-    const token = typeof authHeader === "string" 
-      ? authHeader.replace(/^Bearer\s+/i, "").trim() 
-      : null;
-    
+    const authHeader =
+      ctx.req.headers?.authorization ||
+      ctx.req.headers?.["Authorization"] ||
+      (ctx.req.headers as Record<string, string | string[] | undefined>)
+        ?.authorization;
+
+    const token =
+      typeof authHeader === "string"
+        ? authHeader.replace(/^Bearer\s+/i, "").trim()
+        : null;
+
     if (token && token !== "undefined") {
       await ctx.db.session.deleteMany({
         where: { token },
@@ -226,4 +268,3 @@ export const authRouter = createTRPCRouter({
     return { success: true };
   }),
 });
-

@@ -7,23 +7,32 @@ import { db } from "~/server/db";
 
 export const createTRPCContext = async (opts: CreateNextContextOptions) => {
   // Next.js normalizes headers to lowercase, but handle both cases for robustness
-  const authHeader = opts.req.headers.authorization || 
-                     opts.req.headers["Authorization"] ||
-                     (opts.req.headers as Record<string, string | string[] | undefined>).authorization;
-  
-  const token = typeof authHeader === "string" 
-    ? authHeader.replace(/^Bearer\s+/i, "").trim() 
-    : null;
+  const authHeader =
+    opts.req.headers.authorization ||
+    opts.req.headers["Authorization"] ||
+    (opts.req.headers as Record<string, string | string[] | undefined>)
+      .authorization;
+
+  const token =
+    typeof authHeader === "string"
+      ? authHeader.replace(/^Bearer\s+/i, "").trim()
+      : null;
 
   let userId: string | null = null;
   if (token && token !== "undefined") {
-    const session = await db.session.findUnique({
-      where: { token },
-      select: { userId: true, expiresAt: true },
-    });
+    try {
+      const session = await db.session.findUnique({
+        where: { token },
+        select: { userId: true, expiresAt: true },
+      });
 
-    if (session && session.expiresAt > new Date()) {
-      userId = session.userId;
+      if (session && session.expiresAt > new Date()) {
+        userId = session.userId;
+      }
+    } catch (error) {
+      // If database query fails, log but don't throw - allow request to continue
+      // The operation itself will fail and return a proper error
+      console.error("Error fetching session:", error);
     }
   }
 
@@ -64,4 +73,3 @@ const isAuthenticated = t.middleware(({ ctx, next }) => {
 });
 
 export const protectedProcedure = t.procedure.use(isAuthenticated);
-

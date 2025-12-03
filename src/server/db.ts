@@ -12,5 +12,6 @@ export const db =
       env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
   });
 
-if (env.NODE_ENV !== "production") globalForPrisma.prisma = db;
-
+// Cache Prisma Client globally to prevent connection pool exhaustion in serverless
+// This is especially important for Vercel serverless functions
+globalForPrisma.prisma = db;
