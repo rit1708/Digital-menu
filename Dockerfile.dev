@@ -1,0 +1,23 @@
+# Dockerfile for development
+FROM node:20-alpine
+
+# Install necessary tools
+RUN apk add --no-cache libc6-compat openssl
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+# Copy Prisma schema for client generation
+COPY prisma ./prisma
+
+# Generate Prisma Client
+RUN npx prisma generate
+
+EXPOSE 3000
+
+# Start development server (will be overridden by docker-compose command)
+CMD ["npm", "run", "dev"]
+

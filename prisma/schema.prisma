@@ -1,0 +1,110 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  country   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  restaurants Restaurant[]
+  sessions    Session[]
+
+  @@map("User")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model VerificationCode {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email, code])
+  @@index([email])
+}
+
+model Restaurant {
+  id        String   @id @default(cuid())
+  name      String
+  location  String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categories Category[]
+  dishes    Dish[]
+
+  @@index([userId])
+}
+
+model Category {
+  id           String   @id @default(cuid())
+  name         String
+  restaurantId String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurant Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  dishes     DishCategory[]
+
+  @@index([restaurantId])
+}
+
+model Dish {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  image       String?
+  price       Float?
+  spiceLevel  Int?
+  isVegetarian Boolean @default(true)
+  restaurantId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  restaurant Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  categories DishCategory[]
+
+  @@index([restaurantId])
+}
+
+model DishCategory {
+  id         String   @id @default(cuid())
+  dishId     String
+  categoryId String
+  createdAt  DateTime @default(now())
+
+  dish     Dish     @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([dishId, categoryId])
+  @@index([dishId])
+  @@index([categoryId])
+}
+
