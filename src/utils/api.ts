@@ -17,19 +17,21 @@ const getHeaders = () => {
   if (typeof window === "undefined") {
     return {};
   }
-  
+
   const token = localStorage.getItem("auth-token");
-  
-  if (!token || 
-      token === "undefined" || 
-      token === "null" || 
-      token.trim() === "") {
+
+  if (
+    !token ||
+    token === "undefined" ||
+    token === "null" ||
+    token.trim() === ""
+  ) {
     if (token) {
       localStorage.removeItem("auth-token");
     }
     return {};
   }
-  
+
   return {
     authorization: `Bearer ${token}`,
   };
@@ -45,17 +47,38 @@ export const api = createTRPCNext<AppRouter>({
             url: `${getBaseUrl()}/api/trpc`,
             headers: getHeaders,
             transformer: superjson,
+            fetch(url, options) {
+              return fetch(url, {
+                ...options,
+                credentials: "include",
+              }).catch((error) => {
+                console.error("Fetch error:", error);
+                throw error;
+              });
+            },
           }),
           false: httpBatchLink({
             url: `${getBaseUrl()}/api/trpc`,
             headers: getHeaders,
             transformer: superjson,
+            fetch(url, options) {
+              return fetch(url, {
+                ...options,
+                credentials: "include",
+              }).catch((error) => {
+                console.error("Fetch error:", error);
+                throw error;
+              });
+            },
           }),
         }),
       ],
       queryClientConfig: {
         defaultOptions: {
           queries: {
+            retry: false,
+          },
+          mutations: {
             retry: false,
           },
         },
@@ -65,4 +88,3 @@ export const api = createTRPCNext<AppRouter>({
   ssr: false,
   transformer: superjson,
 });
-

@@ -15,12 +15,8 @@ const handler = createNextApiHandler({
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Content-Type": "application/json",
     };
-
-    // Handle OPTIONS preflight
-    if (type === "query" || type === "mutation") {
-      return { headers };
-    }
 
     return { headers };
   },
@@ -36,24 +32,30 @@ const handler = createNextApiHandler({
             console.error("Error cause:", error.cause);
           }
         }
-      : undefined,
+      : ({ path, error }) => {
+          // Log errors in production too, but less verbose
+          console.error(
+            `tRPC error on ${path ?? "<no-path>"}: ${error.message}`
+          );
+        },
 });
 
-// Handle OPTIONS preflight requests
+// Handle OPTIONS preflight requests and ensure proper error handling
 export default async function apiHandler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // Set CORS headers for all requests
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  // Handle OPTIONS preflight requests
   if (req.method === "OPTIONS") {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader(
-      "Access-Control-Allow-Headers",
-      "Content-Type, Authorization"
-    );
     res.status(200).end();
     return;
   }
 
+  // Delegate to tRPC handler - it will handle all error cases and return proper JSON
   return handler(req, res);
 }
